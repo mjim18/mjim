@@ -1,0 +1,131 @@
+# 2SAT Solver
+
+import time
+import matplotlib.pyplot as plt
+import csv
+
+
+
+def main():
+    with open('kSAT.cnf.csv', mode='r') as file:
+        csvFile = csv.reader(file)
+        cnf = []
+        problem_sizes = []  # store the number of clauses for each CNF
+        execution_times = []  # store the execution time for each CNF
+        num_vars = 0
+        num_clauses = 0
+        for line in csvFile:
+            
+            if line[0].startswith('p'):
+
+                if cnf:
+                    process_cnf(cnf, num_clauses, problem_sizes, execution_times)
+                    cnf = []  # reset CNF list for the next formula
+                # extract number of vars and clauses
+                num_vars = int(line[2])
+                num_clauses = int(line[3])
+            elif not line[0].startswith('c'):
+                # each row is clause
+                clause = []
+                for var in line:
+                    try:
+                        lit = int(var)
+                        if lit != 0:
+                            clause.append(lit)
+                    except:
+                        continue     #ignore non-int
+                if clause:
+                    cnf.append(clause)
+
+        # process last CNF after the loop finishes
+        if cnf:
+            process_cnf(cnf, num_clauses, problem_sizes, execution_times)
+        
+
+        plt.scatter(problem_sizes, execution_times, marker='o')
+        plt.title("Execution Time vs Problem Size")
+        plt.xlabel("Number of Clauses")
+        plt.ylabel("Execution Time (seconds)")
+        plt.grid(True)
+        plt.show()
+
+
+def process_cnf(cnf, num_clauses, problem_sizes, execution_times):
+    """
+    Processes a CNF by running the DPLL algorithm and tracking the execution time.
+    Stores results for plotting later.
+    """
+    problem_sizes.append(num_clauses)
+
+    # measure execution time for DPLL algorithm
+    start_time = time.time()  # start the timer
+    satisfiable = dpll(cnf)
+    end_time = time.time()  # end the timer
+
+    execution_time = end_time - start_time
+    execution_times.append(execution_time)
+
+    result = "Satisfiable" if satisfiable else "Not Satisfiable"
+    print(f"CNF with {num_clauses} clauses: {result} (Execution time: {execution_time:.4f} seconds)")
+
+def propagate(literal, cnf):
+    new_cnf = []
+    for clause in cnf:
+        if literal in clause:
+            continue            # clause is satisfied
+        new_clause = [lit for lit in clause if lit != -literal]   # remove negation
+
+        if len(new_clause) == 0:
+            return None            # empty clause
+        new_cnf.append(new_clause)
+    return new_cnf
+
+def pure_elim(cnf):
+    all_literals = [lit for clause in cnf for lit in clause]
+    pure_literals = {lit for lit in all_literals if -lit not in all_literals}
+    
+    new_cnf = []
+    for clause in cnf:
+        if not any(lit in pure_literals for lit in clause):
+            new_cnf.append(clause)
+    return new_cnf
+
+def choose_lit(cnf):
+     for clause in cnf:
+        for literal in clause:
+            return literal  # return the first literal found
+        
+def dpll(cnf):
+    # unit propagation
+    unit_clauses = [clause[0] for clause in cnf if len(clause) == 1]
+    while unit_clauses:
+        literal = unit_clauses.pop()
+        cnf = propagate(literal, cnf)
+        if cnf is None:
+            return False
+        unit_clauses = [clause[0] for clause in cnf if len(clause) == 1]
+
+    # pure literal elimination
+    cnf = pure_elim(cnf)
+
+    # stopping conditions
+    if not cnf:  # all clauses satisfied
+        return True
+    if [] in cnf:  # empty clause found (unsatisfiable)
+        return False
+    
+    literal = choose_lit(cnf)
+
+    # Propagate with the chosen literal and check recursively
+    new_cnf = propagate(literal, cnf)
+    if new_cnf is not None and dpll(new_cnf):
+        return True
+
+    # Propagate with the negation of the literal and check recursively
+    new_cnf_neg = propagate(-literal, cnf)
+    if new_cnf_neg is not None and dpll(new_cnf_neg):
+        return True
+
+    return False  # Both branches failed
+
+main()
